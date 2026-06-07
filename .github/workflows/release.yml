@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Supabase Edge Functions
+        run: supabase functions build
+
+      - name: Validate OpenAPI file
+        run: npx --yes @redocly/cli@latest lint openapi.yaml
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Apply Supabase migrations
+        run: |
+          supabase start
+          supabase db push --local
+
+      - name: Prepare build artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts/frontend release-artifacts/functions
+
+          if [ -d .next ]; then
+            cp -R .next release-artifacts/frontend/
+          elif [ -d dist ]; then
+            cp -R dist release-artifacts/frontend/
+          elif [ -d build ]; then
+            cp -R build release-artifacts/frontend/
+          elif [ -d out ]; then
+            cp -R out release-artifacts/frontend/
+          elif [ -d .output ]; then
+            cp -R .output release-artifacts/frontend/
+          else
+            echo "No recognized frontend build output directory found." >&2
+            exit 1
+          fi
+
+          if [ -d supabase/functions ]; then
+            cp -R supabase/functions release-artifacts/functions/
+          else
+            echo "supabase/functions directory not found." >&2
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: release-${{ github.sha }}
+          release_name: release-${{ github.sha }}
+          draft: false
+          prerelease: false
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ github.sha }}
+          path: release-artifacts/
+          if-no-files-found: error

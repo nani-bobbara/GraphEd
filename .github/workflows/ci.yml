@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feature/**
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  build-and-validate:
+    name: Build and Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Initialize reports directory
+        run: mkdir -p reports
+
+      - name: TypeScript type-check
+        run: |
+          set -eo pipefail
+          npm run type-check 2>&1 | tee reports/type-check.log
+
+      - name: ESLint linting
+        run: |
+          set -eo pipefail
+          npm run lint 2>&1 | tee reports/eslint.log
+
+      - name: Run unit tests
+        run: |
+          set -eo pipefail
+          npm test 2>&1 | tee reports/unit-tests.log
+
+      - name: Validate OpenAPI file
+        run: |
+          set -eo pipefail
+          npx --yes @redocly/cli@latest lint openapi.yaml 2>&1 | tee reports/openapi-lint.log
+
+      - name: Validate Supabase migrations
+        run: |
+          set -eo pipefail
+          supabase db lint 2>&1 | tee reports/supabase-db-lint.log
+
+      - name: Validate RLS policies
+        run: |
+          set -eo pipefail
+          supabase start 2>&1 | tee reports/supabase-start.log
+          supabase db reset --local --no-seed 2>&1 | tee reports/supabase-db-reset.log
+
+          MISSING_RLS=$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -Atc "
+            SELECT c.relname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind = 'r'
+              AND c.relname <> 'schema_migrations'
+              AND c.relrowsecurity = false;
+          ")
+
+          {
+            echo "RLS validation result:";
+            if [ -n "$MISSING_RLS" ]; then
+              echo "Missing RLS on tables:";
+              echo "$MISSING_RLS";
+            else
+              echo "All public tables have RLS enabled.";
+            fi
+          } | tee reports/rls-validation.log
+
+          if [ -n "$MISSING_RLS" ]; then
+            echo "RLS validation failed." >&2
+            exit 1
+          fi
+
+      - name: Secret scanning (GitHub Advanced Security)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eo pipefail
+          curl -sS \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/secret-scanning/alerts?state=open&per_page=100" \
+            > reports/secret-scanning-alerts.json
+
+          ALERT_COUNT=$(jq 'length' reports/secret-scanning-alerts.json)
+          echo "Open secret scanning alerts: $ALERT_COUNT" | tee reports/secret-scanning.log
+
+          if [ "$ALERT_COUNT" -gt 0 ]; then
+            echo "Secret scanning failed: open alerts detected." >&2
+            exit 1
+          fi
+
+      - name: Upload CI logs and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-reports
+          path: reports/
+          if-no-files-found: error
+
+  codeql:
+    name: CodeQL Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+
+      - name: Upload CodeQL logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-logs
+          path: |
+            /home/runner/work/_temp/codeql_databases
+            /home/runner/work/_temp/codeql_logs
+          if-no-files-found: ignore

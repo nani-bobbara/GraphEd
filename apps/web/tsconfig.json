@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@graphed/ui": ["../../packages/ui/src/index.ts"],
+      "@graphed/config": ["../../packages/config/src/index.ts"],
+      "@graphed/supabase-types": ["../../packages/supabase-types/src/index.ts"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,134 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Node.js (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Initialize deployment logs directory
+        run: mkdir -p deploy-logs release-artifacts
+
+      - name: Download release artifacts from triggering workflow
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts"
+          curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$ARTIFACTS_URL" > deploy-logs/release-artifacts.json
+
+          ARTIFACT_ID=$(jq -r '.artifacts[] | select(.name | startswith("release-artifacts-")) | .id' deploy-logs/release-artifacts.json | head -n 1)
+          if [ -z "$ARTIFACT_ID" ] || [ "$ARTIFACT_ID" = "null" ]; then
+            echo "No release artifact found from triggering workflow run." >&2
+            exit 1
+          fi
+
+          curl -sSL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            -o deploy-logs/release-artifacts.zip
+
+          unzip -q deploy-logs/release-artifacts.zip -d release-artifacts
+
+      - name: Build frontend
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -eo pipefail
+          npm run build 2>&1 | tee deploy-logs/frontend-build.log
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy frontend to Vercel
+        run: |
+          set -eo pipefail
+          vercel deploy --prod --token "$VERCEL_TOKEN" 2>&1 | tee deploy-logs/vercel-deploy.log
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+
+      - name: Deploy Supabase Edge Functions
+        run: |
+          set -eo pipefail
+          supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" 2>&1 | tee deploy-logs/supabase-functions-deploy.log
+
+      - name: Apply Supabase migrations
+        run: |
+          set -eo pipefail
+          supabase db push --project-ref "$SUPABASE_PROJECT_REF" 2>&1 | tee deploy-logs/supabase-db-push.log
+
+      - name: Run smoke tests
+        run: |
+          set -eo pipefail
+          npm run test:smoke 2>&1 | tee deploy-logs/smoke-tests.log
+
+      - name: Mark deployment status in GitHub Releases
+        run: |
+          set -euo pipefail
+          TARGET_SHA="${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+          TAG="release-${TARGET_SHA}"
+
+          RELEASE_JSON=$(curl -sS \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+
+          RELEASE_ID=$(echo "$RELEASE_JSON" | jq -r '.id // empty')
+          if [ -z "$RELEASE_ID" ]; then
+            echo "Release tag ${TAG} not found; skipping release status update." | tee deploy-logs/release-status.log
+            exit 0
+          fi
+
+          CURRENT_BODY=$(echo "$RELEASE_JSON" | jq -r '.body // ""')
+          STATUS_LINE="Deployment status: succeeded (${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+          UPDATED_BODY=$(printf "%s\n\n%s\n" "$CURRENT_BODY" "$STATUS_LINE")
+
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}" \
+            -d "$(jq -n --arg body "$UPDATED_BODY" '{body: $body}')" \
+            > deploy-logs/release-status.json
+
+          echo "$STATUS_LINE" | tee -a deploy-logs/release-status.log
+
+      - name: Upload deployment logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-logs-${{ github.run_id }}
+          path: deploy-logs/
+          if-no-files-found: error
