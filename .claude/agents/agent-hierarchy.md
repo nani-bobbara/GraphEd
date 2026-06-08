@@ -8,14 +8,15 @@ Command -> Triggered Agent -> Secondary Agents -> Output -> Validation -> Merge/
 
 Every command flows through this pipeline:
 
-1. Product Owner Agent (always first)
-2. Architect Agent (if design/schema/API needed)
-3. Backend Agent (if code needed)
-4. AI Orchestrator Agent (if AI logic needed)
-5. Curation Pipeline Agents (if topic lifecycle)
-6. QA Agent (if feature ready for QA)
-7. Security Engineer Agent (every PR)
-8. Product Owner Agent (final approval)
+1. AI Orchestrator Agent executes `validate-mcp-readiness.md` first.
+2. AI Orchestrator Agent executes `validate-agent-skill-fit.md`.
+3. Product Owner Agent validates scope and workflow state.
+4. Architect Agent runs for design, schema, or API boundary changes.
+5. Backend and Frontend Agents implement runtime behavior.
+6. Domain Agents run by capability: Content, Evaluation, Curation, Ingestion, Ranking, Mindmap, Infra, DevOps, Finance.
+7. QA Agent validates acceptance criteria and regression risk.
+8. Security Engineer Agent validates security gates.
+9. Product Owner Agent performs final release decision.
 
 This ensures zero drift and full control.
 
@@ -25,7 +26,9 @@ This ensures zero drift and full control.
 
 | Command | Primary Agent Triggered | Secondary Agents | Conditions | Output |
 | --- | --- | --- | --- | --- |
-| generate-api.md | Backend Agent | Architect, Security Engineer | Feature = In Progress | Supabase Edge Function API |
+| validate-mcp-readiness.md | AI Orchestrator Agent | Product Owner Agent | Before every task | Readiness matrix and allow/deny decision |
+| validate-agent-skill-fit.md | AI Orchestrator Agent | Product Owner Agent | After MCP readiness passes | Skill-fit allow/deny decision |
+| generate-api.md | Backend Agent | Architect, Security Engineer | Feature = In Progress | API handler implementation |
 | generate-module.md | Architect Agent | Backend Agent | Feature = Ready for Development | Module design and boundaries |
 | generate-job.md | Backend Agent | Curation Agents | Feature = In Progress | Cron job and async worker |
 | validate-ai-output.md | AI Orchestrator Agent | Backend, QA | AI output exists | Validated JSON |
@@ -43,10 +46,10 @@ This ensures zero drift and full control.
 
 | Command | Primary Agent | Secondary Agents | Conditions | Output |
 | --- | --- | --- | --- | --- |
-| generate-syllabus.md | AI Orchestrator Agent | Backend Agent | Topic status = pending_syllabus | Syllabus JSON |
+| generate-syllabus.md | AI Orchestrator Agent | Content Agent | Topic status = pending_syllabus | Syllabus JSON |
 | ingest-youtube.md | Ingestion Agent | Backend Agent | Topic status = syllabus_ready | Video metadata |
-| rank-videos.md | Ranking Agent | Backend Agent | Videos ingested | Ranked videos |
-| generate-mindmap.md | Mindmap Agent | Backend Agent | Topic status = verified | Mindmap JSON |
+| rank-videos.md | Ranking Agent | Evaluation Agent | Videos ingested | Ranked videos |
+| generate-mindmap.md | Mindmap Agent | Frontend Agent | Topic status = verified | Mindmap JSON |
 
 ### 2.4 QA and Security Commands
 
@@ -55,7 +58,7 @@ This ensures zero drift and full control.
 | run-tests.md | QA Agent | Backend Agent | Feature = Ready for QA | Test results |
 | file-bug.md | QA Agent | Product Owner Agent | Bug found | Bug file and GitHub Issue |
 | security-scan.md | Security Engineer Agent | Backend Agent | Every PR | Security report |
-| validate-rls.md | Security Engineer Agent | Architect Agent | Schema change | RLS validation |
+| validate-rls.md | Security Engineer Agent | Infra Agent | Schema change | RLS validation |
 
 ## 3. Command Execution Flow (Step-by-Step)
 
@@ -66,7 +69,7 @@ Developer -> generate-api.md -> Backend Agent
 Backend Agent:
 - Reads OpenAPI
 - Reads feature acceptance criteria
-- Generates Edge Function code
+- Generates runtime API implementation
 
 Architect Agent:
 - Validates architecture boundaries
@@ -141,6 +144,8 @@ Triggered by:
 
 ### AI Orchestrator Agent
 Triggered by:
+- validate-mcp-readiness.md
+- validate-agent-skill-fit.md
 - validate-ai-output.md
 - Syllabus generation
 - Video verification
@@ -150,6 +155,21 @@ Triggered by:
 Triggered by:
 - Topic status changes
 - Backend jobs
+
+### DevOps Agent
+Triggered by:
+- Deployment and release workflows
+- Environment setup and deploy validation
+
+### Infra Agent
+Triggered by:
+- Migration and schema lifecycle operations
+- RLS validation and infra safety checks
+
+### Finance Agent
+Triggered by:
+- Billing and subscription operations
+- Stripe-bound financial workflows
 
 ### QA Agent
 Triggered by:

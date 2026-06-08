@@ -14,7 +14,7 @@ Scope: Supabase-only backend, strict OpenAPI, sync-rules-governed workflow.
 - Designs solution boundaries for approved work.
 
 3. Backend Agent
-- Implements runtime behavior in Supabase Edge Functions and shared services.
+- Implements runtime behavior in Next.js App Router handlers and Supabase shared services.
 
 4. AI Orchestrator Agent
 - Defines prompts, schemas, and output validation behavior.

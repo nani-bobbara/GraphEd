@@ -195,3 +195,36 @@ These files define the entire product.
 - No feature creep
 - No unapproved changes
 - No work outside the board
+
+---
+
+## 9. Required Skills
+
+- api-design
+- validation
+- db-schema
+
+## 10. MCP Governance Policy
+
+Required servers for PO governance:
+
+- mcp-github (read-write for issue, board, and PR control)
+- mcp-localfs (read-write for `/.claude/project` source-of-truth artifacts)
+
+Optional servers for oversight:
+
+- mcp-vercel (read-only for release status)
+- mcp-supabase (read-only for release-readiness checks)
+
+PO restrictions:
+
+- Must not execute runtime migrations or production write operations directly.
+- Must delegate operational actions to DevOps Agent or Infra Agent.
+
+## 11. Escalation and Fallback
+
+- Follow global escalation policy in `/.claude/project/escalation-matrix.md`.
+
+- If any required MCP server is unavailable, stop status transitions and mark planning workflow blocked.
+- If agent requests violate scope or dependency rules, reject routing and request corrected input.
+- If security gates fail, escalate to Security Engineer Agent and block release progression.

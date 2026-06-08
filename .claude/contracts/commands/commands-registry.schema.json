@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://graphed.local/schemas/commands-registry.schema.json",
+  "title": "Claude Commands Registry",
+  "type": "object",
+  "required": ["version", "commands"],
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "commands": {
+      "type": "array",
+      "items": { "$ref": "./command-contract.schema.json" },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false
+}

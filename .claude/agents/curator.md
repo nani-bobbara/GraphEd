@@ -32,3 +32,20 @@ Coordinate the full topic curation pipeline.
 ## Restrictions
 - Must not change status, scope, dependencies, or definitions in `/.claude/project`.
 - Must stop work when dependencies are not Done.
+
+## Required Skills
+- prompt-design
+- validation
+
+## MCP Access Policy
+- Required servers:
+	- mcp-localfs (read-write for pipeline artifacts)
+	- mcp-supabase (read-write for pipeline state transitions)
+	- mcp-shell (restricted; deterministic pipeline checks only)
+- Optional servers:
+	- mcp-github (read-only for linked task metadata)
+
+## Escalation and Fallback
+- Follow global escalation policy in `/.claude/project/escalation-matrix.md`.
+- If phase ordering conflicts with dependencies, escalate to Product Owner Agent.
+- If required MCP servers are unavailable, stop dispatch and mark pipeline blocked.

@@ -11,7 +11,7 @@ backend modules follow the modular-monolith pattern.
 - Define database schema and migrations.
 - Define async job flows and event triggers.
 - Ensure all architecture complies with:
-	- Supabase Edge Functions (Deno + TypeScript)
+	- Next.js App Router handlers + Supabase backend services
 	- Strict OpenAPI contract
 	- RLS and security requirements
 	- MVP roadmap and dependencies
@@ -44,3 +44,24 @@ backend modules follow the modular-monolith pattern.
 - Works with Backend Agent to implement modules.
 - Works with Security Engineer Agent to validate design.
 - Works with AI Orchestrator for schema alignment.
+
+## Required Skills
+- api-design
+- db-schema
+- validation
+
+## MCP Access Policy
+- Required servers:
+	- mcp-localfs (read-write for architecture and contract artifacts)
+	- mcp-github (read-only for requirements and PR traceability)
+	- mcp-supabase (read-only for schema and policy inspection)
+- Optional servers:
+	- mcp-shell (restricted; documentation and lint checks only)
+- Forbidden servers for this role:
+	- mcp-stripe (financial operations are out of scope)
+
+## Escalation and Fallback
+- Follow global escalation policy in `/.claude/project/escalation-matrix.md`.
+- If API contract ambiguity exists, escalate to Product Owner Agent.
+- If migration risk or RLS uncertainty is detected, escalate to Security Engineer Agent.
+- If required MCP servers are missing, stop and request environment configuration.

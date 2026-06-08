@@ -218,3 +218,26 @@ Before generating any output, each agent must:
 /.claude/project/bugs/*
 /.claude/project/board.md
 /.claude/project/roadmap.md
+
+## 9. Autonomous Safety Governance
+
+### 9.1 Command Contract Requirement
+
+- All command documents in `/.claude/commands/` must have a machine-readable counterpart in `/.claude/contracts/commands/commands.registry.json`.
+- Command contract schema is defined in `/.claude/contracts/commands/command-contract.schema.json`.
+- Agents must not execute commands missing a contract entry.
+
+### 9.2 Mandatory Preflight Sequence
+
+Before assignment of any command:
+
+1. Run `validate-mcp-readiness.md`
+2. Run `validate-agent-skill-fit.md`
+3. If both pass, continue normal routing.
+
+Any failure in this sequence blocks execution.
+
+### 9.3 Escalation Reference
+
+- All agent escalations must follow `/.claude/project/escalation-matrix.md`.
+- Level 2 and Level 3 escalations block autonomous continuation until resolved.
